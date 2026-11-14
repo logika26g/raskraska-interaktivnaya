@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2d1b4e">
+<title>Интерактивная раскраска (Демо)</title>
+<style>
+    :root { --bg-dark: #1a0f2e; --panel-bg: #2d1b4e; --accent: #7e57c2; --accent-hover: #9575cd; --text: #e8e0f5; --border: #4a2d6e; --container-bg: #2a1a4a; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg-dark); color: var(--text); display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ---------- TOP BAR ---------- */
+    #top-bar { background: var(--panel-bg); padding: 6px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--border); z-index: 100; flex-shrink: 0; position: relative; }
+    #top-bar h1 { margin: 0; font-size: 16px; color: #d1c4e9; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+    
+    .btn-menu { background: #5c6bc0; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn-menu:hover { background: #7986cb; }
+
+    .top-controls { 
+        display: none; 
+        position: absolute; top: 100%; left: 0; right: 0; 
+        background: var(--panel-bg); padding: 12px; 
+        border-bottom: 2px solid var(--border);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        z-index: 99;
+        flex-wrap: wrap; gap: 8px; justify-content: center;
+    }
+    .top-controls.mobile-open { display: flex; }
+    
+    #scene-switcher { display: flex; align-items: center; gap: 4px; background: #241640; padding: 4px 8px; border-radius: 6px; }
+    .scene-label { font-size: 12px; font-weight: 600; color: #b39ddb; }
+    #scene-buttons button { width: 36px; height: 36px; border-radius: 6px; background: #352259; border: 1px solid transparent; color: #d1c4e9; font-weight: 700; cursor: pointer; }
+    #scene-buttons button.active { background: #9b7be2; color: #fff; }
+
+    button { background: var(--accent); color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: background 0.15s; min-height: 38px; touch-action: manipulation; }
+    button:hover:not(:disabled) { background: var(--accent-hover); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.btn-secondary { background: #5c6bc0; }
+    button.btn-fullscreen { background: #ff5722; }
+   button.btn-save { background: #00bcd4; }
+
+    /* ---------- LAYOUT & CANVAS ---------- */
+    #main-layout { display: flex; flex: 1; overflow: hidden; padding: 8px; gap: 8px; justify-content: center; min-height: 0; margin-bottom: 45px; }
+    #canvas-container { flex: 1; display: flex; justify-content: flex-start; align-items: flex-start; background: var(--container-bg); border-radius: 10px; border: 2px solid var(--border); position: relative; overflow: auto; box-shadow: inset 0 0 20px rgba(0,0,0,0.3); min-width: 0; touch-action: none; padding: 10px; }
+    #canvas-container::-webkit-scrollbar { width: 14px; height: 14px; }
+    #canvas-container::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; border: 3px solid var(--container-bg); }
+    #canvas-container::-webkit-scrollbar-thumb:hover { background: var(--accent-hover); }
+    #board-wrapper { position: relative; box-shadow: 0 5px 20px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; margin: auto; flex-shrink: 0; }
+    canvas { display: block; cursor: crosshair; touch-action: none; background-color: #ffffff; }
+
+    /* ---------- TOOLS PANEL ---------- */
+    #tools-panel { 
+        width: 320px; background: var(--panel-bg); border-radius: 10px; border: 1px solid var(--border); 
+        padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex-shrink: 0; max-height: 100%; 
+        position: relative;
+    }
+    .section-title { font-size: 11px; font-weight: 700; color: #b39ddb; text-transform: uppercase; border-bottom: 1px solid var(--border); margin-top: 4px; padding-bottom: 2px; }
+    
+    /* ПАЛИТРА */
+    .palette { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .color-swatch { width: 100%; aspect-ratio: 1; min-height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; transition: transform 0.1s; }
+    .color-swatch:hover { transform: scale(1.1); z-index: 2; }
+    .color-swatch.active { border: 2px solid #fff; box-shadow: 0 0 0 2px var(--accent); }
+
+    .tool-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tool-group button { flex: 1 1 30%; padding: 8px 4px; background: #3a2560; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; }
+    .tool-group button span { font-size: 18px; }
+    .tool-group button.active { background: var(--accent); border-color: var(--accent); }
+    
+    /* СКРЫТЫЕ НАСТРОЙКИ */
+    .settings-panel { display: none; flex-direction: column; gap: 8px; background: #241640; padding: 10px; border-radius: 8px; margin-top: 4px; border: 1px solid var(--border); }
+    .settings-panel.open { display: flex; }
+
+    .slider-group { display: flex; align-items: center; gap: 8px; font-size: 13px; background: #352259; padding: 6px 10px; border-radius: 6px; }
+    input[type=range] { flex: 1; accent-color: var(--accent); height: 24px; }
+    .upload-block { background: #352259; border: 1px dashed #7e57c2; border-radius: 6px; padding: 10px; text-align: center; cursor: pointer; position: relative; font-size: 13px; font-weight: 600; min-height: 42px; display: flex; align-items: center; justify-content: center; }
+    .upload-block input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    input[type="text"] { width: 100%; padding: 8px; border-radius: 6px; border: none; font-size: 13px; }
+
+    /* ---------- FULLSCREEN & PANEL TOGGLE ---------- */
+    #canvas-container:fullscreen, 
+    #canvas-container.pseudo-fullscreen {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        border: none !important;
+        background: #1a0f2e !important;
+        justify-content: flex-start !important;
+        align-items: flex-start !important;
+        overflow: auto !important;
+        width: calc(100vw - 340px) !important;
+        padding-right: 10px !important;
+    }
+    
+    /* Показываем кастомный ползунок в полноэкранном режиме */
+    #canvas-container:fullscreen ~ #custom-scrollbar,
+    #canvas-container.pseudo-fullscreen ~ #custom-scrollbar {
+        display: block !important;
+    }
+
+    /* Центрируем холст, когда он помещается на экране */
+    #canvas-container:fullscreen #board-wrapper, 
+    #canvas-container.pseudo-fullscreen #board-wrapper {
+        margin: auto !important;
+    }
+    
+    #canvas-container.pseudo-fullscreen { position: fixed; top: 0; left: 0; z-index: 9998; }
+    #fs-exit-btn { display: none; position: absolute; top: 16px; right: 16px; z-index: 10000; width: 48px; height: 48px; border-radius: 50%; background: #e53935; color: #fff; font-size: 20px; border: 2px solid #fff; cursor: pointer; align-items: center; justify-content: center; }
+    #canvas-container:fullscreen #fs-exit-btn, #canvas-container.pseudo-fullscreen #fs-exit-btn { display: flex; }
+
+    #panel-toggle { display: none; position: absolute; top: 16px; right: 80px; z-index: 10000; width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 20px; border: 2px solid #fff; cursor: pointer; align-items: center; justify-content: center; }
+    #canvas-container:fullscreen #panel-toggle, #canvas-container.pseudo-fullscreen #panel-toggle { display: flex; }
+    #canvas-container.panel-collapsed #tools-panel { display: none !important; }
+
+    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); color: #fff; padding: 10px 20px; border-radius: 30px; border: 2px solid var(--accent); font-size: 13px; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; }
+    
+    /* Фикс для модальных окон в полноэкранном режиме */
+    #canvas-container:fullscreen #crop-modal, #canvas-container.pseudo-fullscreen #crop-modal,
+    #canvas-container:fullscreen #custom-confirm, #canvas-container.pseudo-fullscreen #custom-confirm {
+        position: fixed !important;
+        z-index: 30000 !important;
+    }
+
+    #canvas-container:fullscreen #tools-panel, #canvas-container.pseudo-fullscreen #tools-panel {
+        position: fixed; right: 0; top: 0; bottom: 0; left: auto; transform: none; width: 320px; max-height: 100vh;
+        border-radius: 0; border-left: 2px solid var(--accent); border-top: none; border-bottom: none; border-right: none;
+        z-index: 9999; box-shadow: -4px 0 16px rgba(0,0,0,0.6);
+        overflow-y: auto;
+    }
+
+    /* ---------- АДАПТИВ ДЛЯ МОБИЛЬНЫХ ---------- */
+    @media (max-width: 1024px) {
+        #main-layout { flex-direction: column; padding: 4px; gap: 4px; margin-bottom: 35px; }
+        #tools-panel { width: 100%; max-height: 55vh; flex-direction: column; align-items: stretch; padding: 8px; gap: 8px; }
+        .palette { grid-template-columns: repeat(7, 1fr); gap: 6px; width: 100%; }
+        .color-swatch { min-height: 32px; }
+        .section-title { display: block; margin-top: 0; font-size: 12px; }
+        .tool-group { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; width: 100%; gap: 6px; }
+        .tool-group button { flex: 1 0 80px; min-height: 60px; font-size: 12px; padding: 6px; }
+        .tool-group button span { font-size: 20px; }
+        .settings-panel { flex-direction: column; width: 100%; }
+        .settings-panel .slider-group { width: 100%; }
+        
+        #canvas-container:fullscreen #tools-panel, #canvas-container.pseudo-fullscreen #tools-panel {
+            position: fixed; right: 0; left: 0; bottom: 0; top: auto; transform: none; width: 100%; max-height: 50vh;
+            border-radius: 12px 12px 0 0; border-left: none; border-right: none; border-bottom: none;
+            z-index: 9999; box-shadow: 0 -4px 16px rgba(0,0,0,0.6);
+        }
+    }
+
+    @media (max-height: 500px) and (orientation: landscape) {
+        #tools-panel { max-height: 50vh; }
+        #canvas-container:fullscreen #tools-panel, #canvas-container.pseudo-fullscreen #tools-panel {
+            left: auto; right: 0; top: 50%; bottom: auto; transform: translateY(-50%);
+            width: 240px; max-height: 95vh; border-radius: 12px 0 0 12px; border: 2px solid var(--accent);
+            flex-direction: column; overflow-y: auto;
+        }
+        .palette { grid-template-columns: repeat(5, 1fr); }
+    }
+
+    #footer { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(26, 15, 46, 0.95); border-top: 1px solid var(--border); display: flex; justify-content: center; align-items: center; padding: 6px 12px; z-index: 1000; backdrop-filter: blur(5px); }
+    #footer a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #d1c4e9; font-size: 14px; font-weight: 600; transition: color 0.2s, transform 0.2s; }
+    #footer a:hover { color: #ffffff; transform: scale(1.05); }
+    .footer-logo { height: 28px; width: auto; border-radius: 4px; }
+
+    @media (max-width: 1024px) {
+        #footer { padding: 4px 8px; }
+        #footer a { font-size: 12px; }
+        .footer-logo { height: 22px; }
+    }
+</style>
+</head><body>
+<!-- Демо-плашка -->
+<div style="background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; padding: 10px 20px; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 15px; flex-wrap: wrap; z-index: 101; position: relative;">
+    <span>🎭 Демо-режим: доступна 1 загрузка и 1 сохранение</span>
+</div>
+
+<div id="top-bar">
+    <div style="display:flex; align-items:center; gap:12px;">
+        <h1>🎨 Раскраска (Демо)</h1>
+        <button id="btn-menu-toggle" onclick="toggleTopMenu()" class="btn-menu">⚙️ Управление</button>
+    </div>
+    
+    <div class="top-controls" id="top-controls">
+        <div id="scene-switcher"><span class="scene-label">Сцены:</span><div id="scene-buttons"></div></div>
+        <button class="btn-secondary" onclick="toggleOrientation()" id="orientBtn">🔄 Книжная</button>
+        <button class="btn-save" onclick="saveImage()">💾 Скачать (PNG)</button>
+        <button class="btn-secondary" id="undoBtn" onclick="undo()">↶ Отменить</button>
+        <button class="btn-secondary" id="redoBtn" onclick="redo()">↷ Повторить</button>
+        <button class="btn-secondary" onclick="clearSceneConfirm()">🗑 Сцена</button>
+        <button class="btn-save" onclick="saveProjectToFile()">📥 Сохранить</button>
+        <button class="btn-secondary" onclick="document.getElementById('projectLoader').click()">📤 Открыть</button>
+        <input type="file" id="projectLoader" accept=".json" style="display:none;" onchange="loadProjectFromFile(event)">
+    </div>
+</div>
+
+<div id="main-layout">
+    <div id="canvas-container">
+        <div id="board-wrapper">
+            <canvas id="paintCanvas"></canvas>
+            <!-- НАДПИСЬ ДЕМО -->
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-35deg); font-size:80px; font-weight:900; color:rgba(239,68,68,0.4); pointer-events:none; letter-spacing:10px; user-select:none; z-index:10; text-shadow: 2px 2px 10px rgba(0,0,0,0.1);">ДЕМО</div>
+        </div>
+        <button id="fs-exit-btn" onclick="toggleFullscreen()" title="Выйти">✖</button>
+        <button id="panel-toggle" onclick="togglePanel()" title="Палитра">🎨</button>
+    </div>
+    
+    <div id="tools-panel">
+        <button class="btn-fullscreen" onclick="toggleFullscreen()" id="fsBtn" style="width:100%; margin-bottom: 4px;">⛶ На весь экран</button>
+        <div class="section-title">Инструменты</div>
+        <div class="tool-group">
+            <button id="tool-brush" class="active" onclick="setTool('brush')"><span>✏️</span>Кисть</button>
+            <button id="tool-fill" onclick="setTool('fill')"><span>🪣</span>Залив</button>
+            <button onclick="cancelLastAction()"><span>✖️</span>Сброс</button>
+            <button id="tool-picker" onclick="startPickerForFill()"><span>💧</span>Пипетка</button>
+            <button id="tool-clean" onclick="cleanPaint()"><span>🧽</span>Смыть</button>
+            <button onclick="openCropModal()"><span>✂️</span>Обрезка</button>
+            <button onclick="toggleParams()" style="flex: 1 1 100%;"><span>🎚️</span>Параметры</button>
+        </div>
+
+        <div class="settings-panel" id="params-panel">
+            <div class="slider-group"><span>Толщина:</span><input type="range" id="brushSize" min="1" max="50" value="5"><span id="sizeVal">5</span></div>
+            <div class="slider-group"><span>Допуск:</span><input type="range" id="fillTolerance" min="0" max="80" value="32"><span id="tolVal">32</span></div>
+            <div class="slider-group"><span>Масштаб:</span><input type="range" id="zoomControl" min="0.3" max="3" step="0.05" value="1"><button onclick="resetZoom()" style="padding:4px 6px; font-size:10px; min-height:auto;">1:1</button></div>
+        </div>
+        
+        <div class="section-title">Палитра</div>
+        <div class="palette" id="palette-container"></div>
+        
+        <div style="display:flex; align-items:center; gap:10px; margin-top:4px;">
+            <input type="color" id="customColor" value="#000000" style="width:40px; height:30px; border:none; background:none; cursor:pointer; flex-shrink:0;">
+            <span style="font-size:11px; color:#b39ddb;">Свой цвет</span>
+        </div>
+
+        <button class="btn-secondary" onclick="toggleSettings()" style="width: 100%; margin-top: auto; padding: 8px 12px; position: sticky; bottom: 0; z-index: 10; box-shadow: 0 -4px 10px rgba(0,0,0,0.3);">⚙️ Настройки и Загрузка</button>
+               
+        <div class="settings-panel" id="settings-panel">
+            <label class="upload-block"><input type="file" id="imageLoader" accept="image/*" onchange="loadImageFromFile(event)">📁 Загрузить с ПК</label>
+            <div style="display:flex; gap:4px; margin-top:8px;">
+                <input type="text" id="imageUrl" placeholder="Вставьте ссылку на картинку...">
+                <button class="btn-secondary" onclick="loadImageFromUrl()" style="background:#ff9800; white-space:nowrap;">🌐 Загрузить</button>
+            </div>
+        </div>
+    </div>
+</div><div id="toast">Сообщение</div>
+
+<!-- Кастомный ползунок прокрутки для полного экрана -->
+<div id="custom-scrollbar" style="display:none; position:fixed; bottom:0; left:0; width:calc(100vw - 320px); height:20px; background:rgba(45,27,78,0.8); z-index:10001; cursor:pointer;">
+    <div id="custom-thumb" style="width:0; height:100%; background:var(--accent); border-radius:10px; cursor:grab;"></div>
+</div>
+
+<!-- СВОЁ ОКНО ПОДТВЕРЖДЕНИЯ -->
+<div id="custom-confirm" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:30000; justify-content:center; align-items:center;">
+    <div style="background:var(--panel-bg); padding:25px; border-radius:12px; border:2px solid var(--accent); text-align:center; max-width:350px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+        <h3 style="margin-top:0; color:#d1c4e9;">Подтверждение</h3>
+        <p id="custom-confirm-text" style="font-size:15px; margin-bottom:20px;">Вы уверены?</p>
+        <div style="display:flex; gap:10px; justify-content:center;">
+            <button class="btn-secondary" onclick="closeCustomConfirm(false)" style="flex:1;">Нет</button>
+            <button class="btn-save" onclick="closeCustomConfirm(true)" style="flex:1;">Да</button>
+        </div>
+    </div>
+</div>
+
+<!-- ОКНО ОБРЕЗКИ -->
+<div id="crop-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:20000; justify-content:center; align-items:center; padding:20px;">
+    <div style="background:var(--panel-bg); padding:20px; border-radius:12px; border:2px solid var(--accent); width:100%; max-width:500px; box-shadow:0 10px 30px rgba(0,0,0,0.8); display:flex; flex-direction:column; max-height:90vh;">
+        <h3 style="margin:0 0 10px 0; text-align:center; color:#d1c4e9;">✂️ Обрезка холста</h3>
+        
+        <!-- Контейнер для миниатюры с рамкой -->
+        <div id="crop-preview-container" style="position:relative; flex:1; min-height:200px; background:#111; border-radius:6px; overflow:hidden; margin-bottom:15px; display:flex; justify-content:center; align-items:center;">
+            <canvas id="cropPreviewCanvas" style="max-width:100%; max-height:100%; display:block;"></canvas>
+        </div>
+
+        <!-- Ползунки -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;">
+            <div class="slider-group" style="padding:4px;">
+                <span style="font-size:11px; width:40px;">Сверху:</span>
+                <input type="range" id="cropTop" min="0" max="500" value="0" oninput="updateCropPreview()">
+                <span id="cropTopVal" style="font-size:11px; width:25px;">0</span>
+            </div>
+            <div class="slider-group" style="padding:4px;">
+                <span style="font-size:11px; width:40px;">Снизу:</span>
+                <input type="range" id="cropBottom" min="0" max="500" value="0" oninput="updateCropPreview()">
+                <span id="cropBottomVal" style="font-size:11px; width:25px;">0</span>
+            </div>
+            <div class="slider-group" style="padding:4px;">
+                <span style="font-size:11px; width:40px;">Слева:</span>
+                <input type="range" id="cropLeft" min="0" max="500" value="0" oninput="updateCropPreview()">
+                <span id="cropLeftVal" style="font-size:11px; width:25px;">0</span>
+            </div>
+            <div class="slider-group" style="padding:4px;">
+                <span style="font-size:11px; width:40px;">Справа:</span>
+                <input type="range" id="cropRight" min="0" max="500" value="0" oninput="updateCropPreview()">
+                <span id="cropRightVal" style="font-size:11px; width:25px;">0</span>
+            </div>
+        </div>
+
+        <div style="text-align:center; font-size:13px; margin-bottom:15px; background:#241640; padding:8px; border-radius:6px;">
+            Итоговый размер: <strong id="cropResultSize" style="color:#00bcd4;">—</strong>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <button class="btn-secondary" onclick="closeCropModal()" style="flex:1;">Отмена</button>
+            <button class="btn-save" onclick="applyCrop()" style="flex:1;">Применить</button>
+        </div>
+    </div>
+</div>
+
+<div id="footer">
+    <a href="https://vk.ru/logika24" target="_blank" rel="noopener noreferrer">
+        <span>Свинина Галина Сергеевна</span>
+    </a>
+</div><script>
+    // === НАСТРОЙКИ ДЕМО-РЕЖИМА ===
+    let demoUploads = 0;
+    let demoSaves = 0;
+    const DEMO_LIMIT = 1;
+    const BUY_URL = 'https://vk.ru/market/product/konstruktor-kartochek-228690474-15356690';
+
+    const canvas = document.getElementById('paintCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const wrapper = document.getElementById('board-wrapper');
+    const container = document.getElementById('canvas-container');
+    const zoomControl = document.getElementById('zoomControl');
+    const orientBtn = document.getElementById('orientBtn');
+    const fsBtn = document.getElementById('fsBtn');
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+    // Логика для кастомного ползунка
+    const scrollbar = document.getElementById('custom-scrollbar');
+    const thumb = document.getElementById('custom-thumb');
+
+    if (scrollbar && thumb) {
+        let isDragging = false;
+        let startX, startScrollLeft;
+
+        const startDrag = (e) => {
+            isDragging = true;
+            startX = (e.touches ? e.touches[0].clientX : e.clientX);
+            startScrollLeft = container.scrollLeft;
+            thumb.style.cursor = 'grabbing';
+        };
+
+        const onDrag = (e) => {
+            if (!isDragging) return;
+            const x = (e.touches ? e.touches[0].clientX : e.clientX);
+            const dx = x - startX;
+            const scrollRatio = (container.clientWidth / container.scrollWidth);
+            container.scrollLeft = startScrollLeft - (dx / scrollRatio);
+        };
+
+        const stopDrag = () => {
+            isDragging = false;
+            thumb.style.cursor = 'grab';
+        };
+
+        thumb.addEventListener('mousedown', startDrag);
+        thumb.addEventListener('touchstart', startDrag, { passive: false });
+        window.addEventListener('mousemove', onDrag);
+        window.addEventListener('touchmove', onDrag, { passive: false });
+        window.addEventListener('mouseup', stopDrag);
+        window.addEventListener('touchend', stopDrag);
+    }
+
+    let isDrawing = false, currentTool = 'brush', currentColor = '#000000';
+    let brushSize = isTouchDevice ? 8 : 5, fillTolerance = 32, lastX = 0, lastY = 0;
+    let zoomLevel = 1, isLandscape = false, currentScene = 0;
+    let pickerReturnTo = null, originalSnapshot = null;
+    let pseudoFullscreen = false;
+    let currentFitScale = 1;
+
+    if (isTouchDevice) {
+        document.getElementById('brushSize').value = brushSize;
+        document.getElementById('sizeVal').textContent = brushSize;
+    }
+
+    const SCENE_COUNT = 5;
+    const scenes = [];
+    for (let i = 0; i < SCENE_COUNT; i++) {
+        scenes.push({
+            width: i % 2 === 0 ? 800 : 1000,
+            height: i % 2 === 0 ? 1000 : 800,
+            originalSnapshot: null,
+            history: { stack: [], index: -1, max: 40, locked: false }
+        });
+    }
+
+    // Показ окна "Купить"
+    function showPaywall() {
+        if (document.getElementById('paywallOverlay')) return;
+        const overlay = document.createElement('div');
+        overlay.id = 'paywallOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px);';
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:20px;padding:40px 32px;max-width:480px;width:100%;text-align:center;box-shadow:0 25px 70px rgba(0,0,0,0.4);position:relative;">
+            <button onclick="document.getElementById('paywallOverlay').remove()"
+                    style="position:absolute;top:14px;right:14px;background:#f1f5f9;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;color:#64748b;">×</button>
+            <div style="font-size:64px;margin-bottom:16px;">🔒</div>
+            <h2 style="color:#4c1d95;font-size:24px;margin-bottom:12px;">Демо-режим</h2>
+            <p style="color:#475569;line-height:1.7;margin-bottom:28px;font-size:15px;">
+              В демо-версии можно загрузить только <b>1 картинку</b> и сохранить <b>1 раз</b>.<br>
+              Полная версия снимает все ограничения!
+            </p>
+            <a href="${BUY_URL}" target="_blank" rel="noopener"
+               style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;padding:16px 40px;border-radius:14px;text-decoration:none;font-weight:800;font-size:16px;box-shadow:0 8px 25px rgba(124,58,237,0.4);">
+              💳 Купить полную версию
+            </a>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    function hist() { return scenes[currentScene].history; }
+
+    function snapshot() {
+        const h = hist(); if (h.locked) return;
+        if (h.index < h.stack.length - 1) h.stack = h.stack.slice(0, h.index + 1);
+        
+        h.stack.push({
+            img: ctx.getImageData(0, 0, canvas.width, canvas.height),
+            w: canvas.width,
+            h: canvas.height
+        });
+        
+        if (h.stack.length > h.max) h.stack.shift();
+        h.index = h.stack.length - 1; updateUndoRedoButtons();
+    }
+
+    function restore(s) { 
+        const h = hist(); 
+        h.locked = true; 
+        
+        if (canvas.width !== s.w || canvas.height !== s.h) {
+            canvas.width = s.w; 
+            canvas.height = s.h;
+            scenes[currentScene].width = s.w;
+            scenes[currentScene].height = s.h;
+        }
+        
+        ctx.putImageData(s.img, 0, 0); 
+        h.locked = false; 
+    }
+
+    function undo() { const h = hist(); if (h.index <= 0) return showToast('Отменять нечего'); h.index--; restore(h.stack[h.index]); updateUndoRedoButtons(); showToast('Отменено'); }
+    function redo() { const h = hist(); if (h.index >= h.stack.length - 1) return showToast('Повторять нечего'); h.index++; restore(h.stack[h.index]); updateUndoRedoButtons(); showToast('Повторено'); }
+    function cancelLastAction() { undo(); }
+    function updateUndoRedoButtons() {
+        const h = hist(); const u = document.getElementById('undoBtn'); const r = document.getElementById('redoBtn');
+        if (!u || !r) return; u.disabled = h.index <= 0; r.disabled = h.index >= h.stack.length - 1;
+    }
+
+    function buildSceneSwitcher() {
+        const c = document.getElementById('scene-buttons');
+        for (let i = 0; i < SCENE_COUNT; i++) {
+            const b = document.createElement('button');
+            b.textContent = i + 1; b.dataset.scene = i; b.onclick = () => switchScene(i);
+            c.appendChild(b);
+        }
+        updateSceneSwitcherUI();
+    }
+    function updateSceneSwitcherUI() { document.querySelectorAll('#scene-buttons button').forEach(b => b.classList.toggle('active', parseInt(b.dataset.scene) === currentScene)); }
+    function switchScene(index) {
+        if (index === currentScene) return;
+        if (hist().index >= 0) { const h = hist(); h.stack[h.index].img = ctx.getImageData(0, 0, canvas.width, canvas.height); h.stack[h.index].w = canvas.width; h.stack[h.index].h = canvas.height; }
+        const prev = scenes[currentScene]; prev.width = canvas.width; prev.height = canvas.height; prev.originalSnapshot = originalSnapshot;
+        currentScene = index; 
+        originalSnapshot = scenes[currentScene].originalSnapshot;
+        isLandscape = scenes[currentScene].width > scenes[currentScene].height;
+        loadSceneToCanvas(); updateSceneSwitcherUI(); showToast('Сцена ' + (index + 1));
+    }
+    
+    function loadSceneToCanvas() {
+        const sc = scenes[currentScene]; 
+        canvas.width = sc.width; 
+        canvas.height = sc.height;
+        const h = sc.history;
+        
+        if (h.index >= 0 && h.stack[h.index]) { 
+            const item = h.stack[h.index];
+            if (item.img) {
+                canvas.width = item.w; 
+                canvas.height = item.h;
+                ctx.putImageData(item.img, 0, 0);
+            } else {
+                ctx.putImageData(item, 0, 0);
+            }
+        } else { 
+            ctx.fillStyle = '#ffffff'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height); 
+            h.locked = false; 
+            h.stack = [{img: ctx.getImageData(0, 0, canvas.width, canvas.height), w: canvas.width, h: canvas.height}]; 
+            h.index = 0; 
+        }
+        
+        isLandscape = canvas.width > canvas.height;
+        orientBtn.textContent = isLandscape ? '🔄 Альбомная' : '🔄 Книжная';
+        zoomLevel = 1; 
+        zoomControl.value = 1;
+        updateTransform(); 
+        updateUndoRedoButtons();
+    }    
+
+    let rafPending = false;
+    function scheduleTransform() {
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(() => { rafPending = false; updateTransform(); });
+    }
+    
+    function updateTransform() {
+        const cw = container.clientWidth, ch = container.clientHeight;
+        const availW = Math.max(10, cw - 10), availH = Math.max(10, ch - 50);
+        const visualW = canvas.width;
+        const visualH = canvas.height;
+        currentFitScale = Math.min(availW / visualW, availH / visualH);
+        const totalScale = currentFitScale * zoomLevel;
+        const displayW = visualW * totalScale;
+        const displayH = visualH * totalScale;
+        
+        wrapper.style.transform = 'none';
+        wrapper.style.margin = 'auto';
+        wrapper.style.width = displayW + 'px';  
+        wrapper.style.height = displayH + 'px';
+        
+        canvas.style.position = 'static'; 
+        canvas.style.left = ''; 
+        canvas.style.top = '';
+        canvas.style.width = displayW + 'px'; 
+        canvas.style.height = displayH + 'px';
+        canvas.style.transform = 'none';
+        orientBtn.textContent = (canvas.width > canvas.height) ? '🔄 Альбомная' : '🔄 Книжная';
+
+        // Обновляем кастомный ползунок
+        if (document.fullscreenElement || pseudoFullscreen) {
+            if (scrollbar) {
+                scrollbar.style.display = 'block';
+                scrollbar.style.width = (window.innerWidth - 320) + 'px'; 
+                const visibleWidth = container.clientWidth;
+                const totalWidth = container.scrollWidth;
+                
+                if (totalWidth > visibleWidth) {
+                    const thumbWidth = (visibleWidth / totalWidth) * 100;
+                    thumb.style.width = thumbWidth + '%';
+                    thumb.style.display = 'block';
+                } else {
+                    thumb.style.display = 'none';
+                }
+            }
+        } else {
+            if (scrollbar) scrollbar.style.display = 'none';
+        }
+    }
+
+    window.addEventListener('resize', scheduleTransform);
+    window.addEventListener('orientationchange', () => setTimeout(scheduleTransform, 150));
+
+    function toggleTopMenu() {
+        const controls = document.getElementById('top-controls');
+        controls.classList.toggle('mobile-open');
+    }
+    function toggleSettings() { document.getElementById('settings-panel').classList.toggle('open'); }
+    function toggleParams() { document.getElementById('params-panel').classList.toggle('open'); }
+
+    document.addEventListener('click', (e) => {
+        const controls = document.getElementById('top-controls');
+        const btn = document.getElementById('btn-menu-toggle');
+        if (controls.classList.contains('mobile-open') && !controls.contains(e.target) && !btn.contains(e.target)) {
+            controls.classList.remove('mobile-open');
+        }
+    });
+
+    let panelPlaceholder = null;
+    let modalsPlaceholder = null;
+
+    function enterPanelIntoContainer() {
+        const panel = document.getElementById('tools-panel');
+        if (panel.parentElement !== container) {
+            panelPlaceholder = document.createElement('div'); 
+            panelPlaceholder.style.display = 'none';
+            panel.parentNode.insertBefore(panelPlaceholder, panel); 
+            container.appendChild(panel);
+        }
+
+        const cropModal = document.getElementById('crop-modal');
+        const confirmModal = document.getElementById('custom-confirm');
+        
+        if (cropModal.parentElement !== container || confirmModal.parentElement !== container) {
+            modalsPlaceholder = document.createElement('div'); 
+            modalsPlaceholder.style.display = 'none';
+            cropModal.parentNode.insertBefore(modalsPlaceholder, cropModal); 
+            
+            container.appendChild(cropModal);
+            container.appendChild(confirmModal);
+        }
+    }
+
+    function returnPanelFromContainer() {
+        const panel = document.getElementById('tools-panel');
+        if (panel.parentElement === container && panelPlaceholder) {
+            panelPlaceholder.parentNode.insertBefore(panel, panelPlaceholder);
+            panelPlaceholder.remove(); 
+            panelPlaceholder = null;
+        }
+        
+        const cropModal = document.getElementById('crop-modal');
+        const confirmModal = document.getElementById('custom-confirm');
+        
+        if (modalsPlaceholder && cropModal.parentElement === container) {
+            modalsPlaceholder.parentNode.insertBefore(cropModal, modalsPlaceholder);
+            modalsPlaceholder.parentNode.insertBefore(confirmModal, modalsPlaceholder);
+            modalsPlaceholder.remove(); 
+            modalsPlaceholder = null;
+        }
+        
+        container.classList.remove('panel-collapsed');
+        const btn = document.getElementById('panel-toggle'); 
+        if (btn) btn.textContent = '🎨';
+    }
+    function togglePanel() {
+        container.classList.toggle('panel-collapsed');
+        const btn = document.getElementById('panel-toggle');
+        if (btn) btn.textContent = container.classList.contains('panel-collapsed') ? '🎨' : '✖';
+    }
+    function enterPseudoFullscreen() {
+        container.classList.add('pseudo-fullscreen'); pseudoFullscreen = true;
+        fsBtn.textContent = '⛶ Выйти'; enterPanelIntoContainer(); window.scrollTo(0, 1); setTimeout(updateTransform, 100);
+    }
+    function exitPseudoFullscreen() {
+        container.classList.remove('pseudo-fullscreen'); pseudoFullscreen = false;
+        fsBtn.textContent = '⛶ На весь экран'; returnPanelFromContainer(); setTimeout(updateTransform, 100);
+    }
+    function toggleFullscreen() {
+        if (pseudoFullscreen) { exitPseudoFullscreen(); return; }
+        if (!document.fullscreenElement) {
+            if (container.requestFullscreen) {
+                container.requestFullscreen().then(() => { fsBtn.textContent = '⛶ Выйти'; enterPanelIntoContainer(); setTimeout(updateTransform, 100); }).catch(() => enterPseudoFullscreen());
+            } else { enterPseudoFullscreen(); }
+        } else {
+            document.exitFullscreen().then(() => { fsBtn.textContent = '⛶ На весь экран'; returnPanelFromContainer(); setTimeout(updateTransform, 100); }).catch(() => exitPseudoFullscreen());
+        }
+    }
+    document.addEventListener('fullscreenchange', () => { const isFs = !!document.fullscreenElement; fsBtn.textContent = (isFs || pseudoFullscreen) ? '⛶ Выйти' : '⛶ На весь экран'; setTimeout(updateTransform, 50); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && pseudoFullscreen) exitPseudoFullscreen(); });
+
+    function toggleOrientation() {
+        const oldW = canvas.width;
+        const oldH = canvas.height;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = oldW;
+        tempCanvas.height = oldH;
+        tempCanvas.getContext('2d').drawImage(canvas, 0, 0);
+        canvas.width = oldH;
+        canvas.height = oldW;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(tempCanvas, 0, 0, oldW, oldH);
+        ctx.restore();
+        const sc = scenes[currentScene];
+        sc.width = canvas.width;
+        sc.height = canvas.height;
+        sc.history.stack = [{img: ctx.getImageData(0, 0, canvas.width, canvas.height), w: canvas.width, h: canvas.height}];
+        sc.history.index = 0;
+        isLandscape = canvas.width > canvas.height;
+        zoomLevel = 1; 
+        zoomControl.value = 1; 
+        updateTransform();
+        showToast('Ориентация изменена');
+    }
+
+    zoomControl.addEventListener('input', e => { zoomLevel = parseFloat(e.target.value); updateTransform(); });
+    function resetZoom() { zoomLevel = 1; zoomControl.value = 1; updateTransform(); }    
+    
+    const colors = ['#000000', '#4a0000', '#800000', '#b30000', '#ff0000', '#ff4d4d', '#ff9999', '#8b4513', '#a0522d', '#d2691e', '#ff8c00', '#ffa500', '#ffd700', '#ffff99', '#808000', '#00ff00', '#008000', '#006400', '#00ffff', '#00bfff', '#0000ff', '#4b0082', '#800080', '#ff00ff', '#ff69b4', '#ffffff', '#d3d3d3', '#808080'];
+    const paletteContainer = document.getElementById('palette-container');
+    colors.forEach(color => {
+        const div = document.createElement('div');
+        div.className = 'color-swatch'; div.style.backgroundColor = color; div.dataset.color = color.toLowerCase();
+        if (color === '#000000') div.classList.add('active');
+        div.onclick = () => { selectColor(color); if (currentTool !== 'fill' && currentTool !== 'brush') setTool('brush'); };
+        paletteContainer.appendChild(div);
+    });
+    function selectColor(color) {
+        currentColor = color.toLowerCase();
+        document.querySelectorAll('.color-swatch').forEach(el => el.classList.toggle('active', el.dataset.color === currentColor));
+        document.getElementById('customColor').value = currentColor;
+        if (pickerReturnTo) { const target = pickerReturnTo; pickerReturnTo = null; setTool(target); showToast('Цвет: ' + color); }
+    }
+    document.getElementById('customColor').addEventListener('input', e => selectColor(e.target.value));
+    function startPickerForFill() {
+        const activeBtn = document.querySelector('.tool-group button.active');
+        if (activeBtn && activeBtn.id === 'tool-fill') pickerReturnTo = 'fill';
+        else if (activeBtn && activeBtn.id === 'tool-brush') pickerReturnTo = 'brush';
+        setTool('picker');
+    }
+    function setTool(tool) {
+        currentTool = tool;
+        document.querySelectorAll('.tool-group button').forEach(b => b.classList.remove('active'));
+        const btn = document.getElementById('tool-' + tool); if (btn) btn.classList.add('active');
+        canvas.style.cursor = tool === 'fill' ? 'copy' : 'crosshair';
+    }
+               // === НОВОЕ ОКНО ПОДТВЕРЖДЕНИЯ ===
+    let confirmCallback = null;
+
+    function showCustomConfirm(text, callback) {
+        document.getElementById('custom-confirm-text').textContent = text;
+        document.getElementById('custom-confirm').style.display = 'flex';
+        confirmCallback = callback;
+    }
+
+    function closeCustomConfirm(result) {
+        document.getElementById('custom-confirm').style.display = 'none';
+        if (confirmCallback) {
+            confirmCallback(result);
+            confirmCallback = null;
+        }
+    }
+
+    function cleanPaint() {
+        showCustomConfirm('Смыть краску, оставив контур?', (result) => {
+            if (!result) return;
+            
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = img.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] === 0) continue;
+                
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                
+                const isDark = r < 100 && g < 100 && b < 100;
+                const isGray = Math.abs(r - g) < 30 && Math.abs(g - b) < 30 && Math.abs(r - b) < 30;
+                
+                if (!(isDark && isGray)) {
+                    data[i] = 255;
+                    data[i + 1] = 255;
+                    data[i + 2] = 255;
+                }
+            }
+            
+            ctx.putImageData(img, 0, 0);
+            
+            snapshot(); 
+            updateUndoRedoButtons();
+            showToast('Краска смыта');
+        });
+    }
+    
+    document.getElementById('brushSize').addEventListener('input', e => { 
+        brushSize = parseInt(e.target.value); 
+        document.getElementById('sizeVal').textContent = brushSize; 
+    });
+    
+    document.getElementById('fillTolerance').addEventListener('input', e => { 
+        fillTolerance = parseInt(e.target.value); 
+        document.getElementById('tolVal').textContent = fillTolerance; 
+    });    function getExactCoordinates(evt) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = evt.clientX !== undefined ? evt.clientX : (evt.touches?.[0]?.clientX || 0);
+        const clientY = evt.clientY !== undefined ? evt.clientY : (evt.touches?.[0]?.clientY || 0);
+        return { 
+            x: (clientX - rect.left) * (canvas.width / rect.width), 
+            y: (clientY - rect.top) * (canvas.height / rect.height) 
+        };
+    }
+    
+    function handlePointerDown(clientX, clientY) {
+        const pos = getExactCoordinates({ clientX, clientY });
+        if (currentTool === 'picker') {
+            if (pos.x < 0 || pos.x >= canvas.width || pos.y < 0 || pos.y >= canvas.height) return;
+            const p = ctx.getImageData(Math.floor(pos.x), Math.floor(pos.y), 1, 1).data;
+            let hex = p[3] === 0 ? '#ffffff' : '#' + ((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1);
+            selectColor(hex); showToast('Цвет выбран: ' + hex); return;
+        }
+        if (currentTool === 'fill') { floodFill(pos.x, pos.y, currentColor); return; }
+        isDrawing = true; lastX = pos.x; lastY = pos.y;
+        drawSegment(pos.x, pos.y);
+    }
+    
+    function handlePointerMove(clientX, clientY) {
+        if (!isDrawing) return;
+        const pos = getExactCoordinates({ clientX, clientY });
+        drawSegment(pos.x, pos.y);
+    }
+    
+    function handlePointerUp() { if (isDrawing) { isDrawing = false; snapshot(); } }
+    
+    function drawSegment(x, y) {
+        ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y);
+        ctx.globalCompositeOperation = 'source-over'; 
+        ctx.strokeStyle = currentColor;
+        const scale = currentFitScale * zoomLevel; 
+        const internalScale = scale > 0 ? 1 / scale : 1;
+        ctx.lineWidth = brushSize * internalScale; 
+        ctx.lineCap = 'round'; 
+        ctx.lineJoin = 'round';
+        ctx.stroke(); 
+        ctx.globalCompositeOperation = 'source-over';
+        lastX = x; lastY = y;
+    }
+
+    canvas.addEventListener('mousedown', e => {
+        if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+        e.preventDefault(); handlePointerDown(e.clientX, e.clientY);
+    });
+    
+    canvas.addEventListener('mousemove', e => { 
+        if (isDrawing) { e.preventDefault(); handlePointerMove(e.clientX, e.clientY); } 
+    });
+    
+    window.addEventListener('mouseup', handlePointerUp);
+    canvas.addEventListener('mouseleave', handlePointerUp);
+
+    let panStart = null;
+    canvas.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            panStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, sl: container.scrollLeft, st: container.scrollTop };
+            handlePointerUp(); e.preventDefault(); return;
+        }
+        if (e.touches.length !== 1) { handlePointerUp(); return; }
+        e.preventDefault(); handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', e => {
+        if (e.touches.length === 2 && panStart) {
+            const dx = e.touches[0].clientX - panStart.x, dy = e.touches[0].clientY - panStart.y;
+            container.scrollLeft = panStart.sl - dx; container.scrollTop = panStart.st - dy;
+            e.preventDefault(); return;
+        }
+        if (e.touches.length !== 1) return;
+        e.preventDefault(); handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', e => { 
+        if (e.touches.length < 2) panStart = null; 
+        e.preventDefault(); handlePointerUp(); 
+    }, { passive: false });
+    
+    canvas.addEventListener('touchcancel', e => { 
+        panStart = null; e.preventDefault(); handlePointerUp(); 
+    }, { passive: false });
+
+    function hexToRgb(hex) { 
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); 
+        return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 }; 
+    }
+
+    function floodFill(startX, startY, fillColor) {
+        const x0 = Math.floor(startX), y0 = Math.floor(startY), W = canvas.width, H = canvas.height;
+        if (x0 < 0 || x0 >= W || y0 < 0 || y0 >= H) return;
+        
+        const imageData = ctx.getImageData(0, 0, W, H), data = imageData.data, fill = hexToRgb(fillColor), startPos = (y0 * W + x0) * 4;
+        const sR = data[startPos], sG = data[startPos + 1], sB = data[startPos + 2], sA = data[startPos + 3];
+        if (sR === fill.r && sG === fill.g && sB === fill.b && sA === 255) return;
+        
+        const tolRGB = fillTolerance, tolA = Math.max(8, Math.floor(fillTolerance / 2));
+        const match = pos => { 
+            const a = data[pos + 3]; 
+            if ((a === 0) !== (sA === 0)) return false; 
+            return Math.abs(data[pos] - sR) <= tolRGB && Math.abs(data[pos + 1] - sG) <= tolRGB && Math.abs(data[pos + 2] - sB) <= tolRGB && Math.abs(a - sA) <= tolA; 
+        };
+        
+        const visited = new Uint8Array(W * H), stack = [y0 * W + x0];
+        while (stack.length > 0) {
+            const idx = stack.pop(); 
+            if (visited[idx] || !match(idx * 4)) continue;
+            let y = (idx / W) | 0, x = idx - y * W, cur = idx;
+            while (y > 0 && !visited[cur - W] && match((cur - W) * 4)) { y--; cur -= W; }
+            let reachLeft = false, reachRight = false;
+            while (y < H && !visited[cur] && match(cur * 4)) {
+                data[cur * 4] = fill.r; data[cur * 4 + 1] = fill.g; data[cur * 4 + 2] = fill.b; data[cur * 4 + 3] = 255; visited[cur] = 1;
+                if (x > 0) { 
+                    const left = cur - 1; 
+                    if (!visited[left] && match(left * 4)) { if (!reachLeft) { stack.push(left); reachLeft = true; } } 
+                    else reachLeft = false; 
+                }
+                if (x < W - 1) { 
+                    const right = cur + 1; 
+                    if (!visited[right] && match(right * 4)) { if (!reachRight) { stack.push(right); reachRight = true; } } 
+                    else reachRight = false; 
+                }
+                y++; cur += W;
+            }
+        }
+        ctx.putImageData(imageData, 0, 0); 
+        snapshot();
+    }    // === ЗАГРУЗКА ИЗОБРАЖЕНИЙ С ПРОВЕРКОЙ ДЕМО ===
+    function loadImageFromFile(event) {
+        const file = event.target.files[0]; if (!file) return;
+        if (demoUploads >= DEMO_LIMIT) {
+            event.target.value = '';
+            showPaywall();
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => { 
+            const img = new Image(); 
+            img.onload = () => { drawImageToCanvas(img); showToast('Картинка загружена'); demoUploads++; }; 
+            img.onerror = () => showToast('Ошибка'); 
+            img.src = e.target.result; 
+        };
+        reader.readAsDataURL(file); event.target.value = '';
+    }
+
+    function loadImageFromUrl() {
+        let url = document.getElementById('imageUrl').value.trim(); 
+        if (!url) return showToast('Введите ссылку');
+        if (demoUploads >= DEMO_LIMIT) {
+            showPaywall();
+            return;
+        }
+        
+        if (!url.includes('wsrv.nl') && !url.includes('corsproxy.io')) {
+            url = 'https://corsproxy.io/?' + encodeURIComponent(url);
+        }
+        
+        showToast('Загрузка...');
+        const img = new Image(); 
+        img.crossOrigin = 'Anonymous';
+        
+        img.onload = () => { 
+            drawImageToCanvas(img); 
+            showToast('Успешно загружено!'); 
+            demoUploads++;
+        };
+        
+        img.onerror = () => { 
+            if (!url.includes('wsrv.nl')) {
+                const cleanUrl = document.getElementById('imageUrl').value.trim();
+                const fallbackUrl = `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}`;
+                const fallbackImg = new Image();
+                fallbackImg.crossOrigin = 'Anonymous';
+                fallbackImg.onload = () => { 
+                    drawImageToCanvas(fallbackImg); 
+                    showToast('Загружено (резервный способ)'); 
+                    demoUploads++;
+                };
+                fallbackImg.onerror = () => showToast('Не удалось загрузить. Попробуйте другую ссылку.');
+                fallbackImg.src = fallbackUrl;
+            } else {
+                showToast('Не удалось загрузить картинку.');
+            }
+        };
+        img.src = url;
+    }
+
+    function drawImageToCanvas(img) {
+        let w = img.width, h = img.height;
+        canvas.width = Math.round(w); 
+        canvas.height = Math.round(h);
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        ctx.fillStyle = '#ffffff'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        originalSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        isLandscape = canvas.width > canvas.height; 
+        zoomLevel = 1; 
+        zoomControl.value = 1; 
+        
+        const sc = scenes[currentScene]; 
+        sc.width = canvas.width; 
+        sc.height = canvas.height; 
+        sc.originalSnapshot = originalSnapshot;
+        sc.history.stack = []; 
+        sc.history.index = -1; 
+        sc.history.locked = false;
+        
+        updateTransform();
+        snapshot(); 
+        updateUndoRedoButtons();
+    }
+
+    // === СОХРАНЕНИЕ С ПРОВЕРКОЙ ДЕМО ===
+    function saveImage() {
+        if (demoSaves >= DEMO_LIMIT) {
+            showPaywall();
+            return;
+        }
+        const t = document.createElement('canvas'); t.width = canvas.width; t.height = canvas.height;
+        const tc = t.getContext('2d'); tc.fillStyle = '#ffffff'; tc.fillRect(0, 0, t.width, t.height); tc.drawImage(canvas, 0, 0);
+        const l = document.createElement('a'); l.download = 'raskraska-scene-' + (currentScene + 1) + '.png'; l.href = t.toDataURL('image/png'); l.click();
+        showToast('Сцена сохранена в PNG');
+        demoSaves++;
+    }
+
+    function clearSceneConfirm() {
+        if (!confirm('Очистить текущую сцену?')) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        ctx.fillStyle = '#ffffff'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const sc = scenes[currentScene];
+        sc.originalSnapshot = null;
+        originalSnapshot = null;
+        
+        sc.history.stack = [];
+        sc.history.index = -1;
+        sc.history.locked = false;
+        
+        snapshot(); 
+        updateUndoRedoButtons();
+        showToast('Сцена очищена');
+    }
+
+    function clearAllProject() {
+        if (!confirm('Вы уверены, что хотите полностью очистить ВСЕ сцены? Это действие нельзя отменить.')) return;
+        
+        scenes.forEach((sc) => {
+            sc.originalSnapshot = null;
+            sc.history.stack = [];
+            sc.history.index = -1;
+            sc.history.locked = false;
+            
+            const t = document.createElement('canvas');
+            t.width = sc.width;
+            t.height = sc.height;
+            const tc = t.getContext('2d');
+            tc.fillStyle = '#ffffff';
+            tc.fillRect(0, 0, sc.width, sc.height);
+            
+            sc.history.stack = [{img: tc.getImageData(0, 0, sc.width, sc.height), w: sc.width, h: sc.height}];
+            sc.history.index = 0;
+        });
+        
+        currentScene = 0;
+        originalSnapshot = null;
+        loadSceneToCanvas();
+        updateSceneSwitcherUI();
+        showToast('Проект полностью очищен');
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+        const t = document.getElementById('toast'); 
+        t.textContent = msg; t.style.opacity = '1';
+        if (toastTimeout) clearTimeout(toastTimeout); 
+        toastTimeout = setTimeout(() => t.style.opacity = '0', 3000);
+    }
+
+    function saveProjectToFile() {
+        if (demoSaves >= DEMO_LIMIT) {
+            showPaywall();
+            return;
+        }
+        try {
+            const data = scenes.map((sc, i) => {
+                let img = null;
+                if (i === currentScene) img = canvas.toDataURL('image/png');
+                else if (sc.history.index >= 0) { 
+                    const t = document.createElement('canvas'); t.width = sc.width; t.height = sc.height; 
+                    const item = sc.history.stack[sc.history.index];
+                    if (item.img) t.getContext('2d').putImageData(item.img, 0, 0);
+                    else t.getContext('2d').putImageData(item, 0, 0);
+                    img = t.toDataURL('image/png'); 
+                }
+                return { width: sc.width, height: sc.height, image: img };
+            });
+            const str = JSON.stringify(data), blob = new Blob([str], {type: "application/json"}), url = URL.createObjectURL(blob);
+            const link = document.createElement('a'); link.href = url; link.download = 'raskraska-proekt.json';
+            document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+            showToast('Проект сохранён!');
+            demoSaves++;
+        } catch (e) { showToast('Ошибка сохранения'); }
+    }
+
+    function loadProjectFromFile(event) {
+        const file = event.target.files[0]; if (!file) return;
+        if (demoUploads >= DEMO_LIMIT) {
+            event.target.value = '';
+            showPaywall();
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                const projectData = JSON.parse(e.target.result);
+                if (!Array.isArray(projectData) || projectData.length === 0) throw new Error('Неверный формат');
+                const loadedScenes = projectData.map(sc => ({
+                    width: sc.width, height: sc.height, originalSnapshot: null,
+                    history: { stack: [{img: sc.image}], index: 0, max: 40, locked: false }
+                }));
+                let loadedCount = 0; const total = loadedScenes.length;
+                loadedScenes.forEach((sc) => {
+                    if (!sc.history.stack[0].img) {
+                        const t = document.createElement('canvas'); t.width = sc.width; t.height = sc.height; 
+                        const tc = t.getContext('2d'); tc.fillStyle = '#ffffff'; tc.fillRect(0, 0, sc.width, sc.height);
+                        sc.history.stack = [{img: tc.getImageData(0, 0, sc.width, sc.height), w: sc.width, h: sc.height}];
+                        loadedCount++; if (loadedCount === total) finishLoad(); return;
+                    }
+                    const img = new Image();
+                    img.onload = () => {
+                        const t = document.createElement('canvas'); t.width = sc.width; t.height = sc.height; 
+                        const tc = t.getContext('2d'); tc.fillStyle = '#ffffff'; tc.fillRect(0, 0, sc.width, sc.height); tc.drawImage(img, 0, 0);
+                        sc.history.stack = [{img: tc.getImageData(0, 0, sc.width, sc.height), w: sc.width, h: sc.height}];
+                        loadedCount++; if (loadedCount === total) finishLoad();
+                    };
+                    img.onerror = () => { loadedCount++; if (loadedCount === total) finishLoad(); };
+                    img.src = sc.history.stack[0].img;
+                });
+                function finishLoad() {
+                    scenes.length = 0; loadedScenes.forEach(sc => scenes.push(sc));
+                    currentScene = 0; originalSnapshot = scenes[0].originalSnapshot || null;
+                    loadSceneToCanvas(); updateSceneSwitcherUI(); showToast('Проект загружен!');
+                    demoUploads++;
+                }
+            } catch (err) { alert('Не удалось загрузить проект.'); }
+        };
+        reader.readAsText(file); event.target.value = '';
+    }
+
+    // === ОБРЕЗКА КАРТИНКИ ===
+    let cropSnapshot = null;
+    let cropImage = null;
+
+    function openCropModal() {
+        snapshot(); 
+        cropSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        tempCanvas.getContext('2d').putImageData(cropSnapshot, 0, 0);
+        
+        cropImage = new Image();
+        cropImage.onload = () => {
+            document.getElementById('crop-modal').style.display = 'flex';
+            requestAnimationFrame(() => {
+                const previewCanvas = document.getElementById('cropPreviewCanvas');
+                const container = document.getElementById('crop-preview-container');
+                
+                const scale = Math.min(container.clientWidth / canvas.width, container.clientHeight / canvas.height);
+                previewCanvas.width = canvas.width * scale;
+                previewCanvas.height = canvas.height * scale;
+                
+                document.getElementById('cropTop').value = 0;
+                document.getElementById('cropBottom').value = 0;
+                document.getElementById('cropLeft').value = 0;
+                document.getElementById('cropRight').value = 0;
+                
+                document.getElementById('cropTop').max = Math.floor(canvas.height / 2);
+                document.getElementById('cropBottom').max = Math.floor(canvas.height / 2);
+                document.getElementById('cropLeft').max = Math.floor(canvas.width / 2);
+                document.getElementById('cropRight').max = Math.floor(canvas.width / 2);
+
+                updateCropPreview();
+            });
+        };
+        cropImage.src = tempCanvas.toDataURL();
+    }
+
+    function closeCropModal() {
+        document.getElementById('crop-modal').style.display = 'none';
+        cropSnapshot = null;
+        cropImage = null;
+    }
+
+    function updateCropPreview() {
+        if (!cropImage) return;
+        
+        const top = parseInt(document.getElementById('cropTop').value);
+        const bottom = parseInt(document.getElementById('cropBottom').value);
+        const left = parseInt(document.getElementById('cropLeft').value);
+        const right = parseInt(document.getElementById('cropRight').value);
+
+        document.getElementById('cropTopVal').textContent = top;
+        document.getElementById('cropBottomVal').textContent = bottom;
+        document.getElementById('cropLeftVal').textContent = left;
+        document.getElementById('cropRightVal').textContent = right;
+
+        const newW = canvas.width - left - right;
+        const newH = canvas.height - top - bottom;
+
+        if (newW <= 0 || newH <= 0) {
+            document.getElementById('cropResultSize').textContent = 'Ошибка: слишком много';
+            document.getElementById('cropResultSize').style.color = '#e53935';
+            return;
+        } else {
+            document.getElementById('cropResultSize').textContent = newW + ' x ' + newH + ' px';
+            document.getElementById('cropResultSize').style.color = '#00bcd4';
+        }
+
+        const previewCanvas = document.getElementById('cropPreviewCanvas');
+        const pCtx = previewCanvas.getContext('2d');
+        
+        pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        pCtx.drawImage(cropImage, 0, 0, previewCanvas.width, previewCanvas.height);
+        
+        const scaleX = previewCanvas.width / canvas.width;
+        const scaleY = previewCanvas.height / canvas.height;
+        
+        pCtx.fillStyle = 'rgba(0,0,0,0.6)';
+        if (top > 0) pCtx.fillRect(0, 0, previewCanvas.width, top * scaleY);
+        if (bottom > 0) pCtx.fillRect(0, previewCanvas.height - (bottom * scaleY), previewCanvas.width, bottom * scaleY);
+        if (left > 0) pCtx.fillRect(0, top * scaleY, left * scaleX, newH * scaleY);
+        if (right > 0) pCtx.fillRect(previewCanvas.width - (right * scaleX), top * scaleY, right * scaleX, newH * scaleY);
+
+        pCtx.strokeStyle = '#00bcd4';
+        pCtx.lineWidth = 2;
+        pCtx.strokeRect(left * scaleX, top * scaleY, newW * scaleX, newH * scaleY);
+    }
+
+    function applyCrop() {
+        const top = parseInt(document.getElementById('cropTop').value);
+        const bottom = parseInt(document.getElementById('cropBottom').value);
+        const left = parseInt(document.getElementById('cropLeft').value);
+        const right = parseInt(document.getElementById('cropRight').value);
+
+        const newW = canvas.width - left - right;
+        const newH = canvas.height - top - bottom;
+
+        if (newW <= 10 || newH <= 10) {
+            showToast('Слишком сильная обрезка!');
+            return;
+        }
+
+        const temp = document.createElement('canvas');
+        temp.width = canvas.width;
+        temp.height = canvas.height;
+        temp.getContext('2d').putImageData(cropSnapshot, 0, 0);
+
+        canvas.width = newW;
+        canvas.height = newH;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, newW, newH);
+        ctx.drawImage(temp, left, top, newW, newH, 0, 0, newW, newH);
+
+        const sc = scenes[currentScene];
+        sc.width = canvas.width;
+        sc.height = canvas.height;
+        
+        const h = hist();
+        h.stack[h.index].img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        h.stack[h.index].w = canvas.width;
+        h.stack[h.index].h = canvas.height;
+
+        if (originalSnapshot) {
+            const oc = document.createElement('canvas');
+            oc.width = originalSnapshot.width;
+            oc.height = originalSnapshot.height;
+            oc.getContext('2d').putImageData(originalSnapshot, 0, 0);
+
+            const nc = document.createElement('canvas');
+            nc.width = newW;
+            nc.height = newH;
+            const nctx = nc.getContext('2d');
+            nctx.fillStyle = '#ffffff';
+            nctx.fillRect(0, 0, nc.width, nc.height);
+            nctx.drawImage(oc, left, top, newW, newH, 0, 0, newW, newH);
+
+            originalSnapshot = nctx.getImageData(0, 0, nc.width, nc.height);
+            sc.originalSnapshot = originalSnapshot;
+        }
+
+        closeCropModal();
+        
+        isLandscape = canvas.width > canvas.height;
+        zoomLevel = 1; 
+        zoomControl.value = 1; 
+        
+        updateTransform();
+        orientBtn.textContent = (canvas.width > canvas.height) ? '🔄 Альбомная' : '🔄 Книжная';
+        updateUndoRedoButtons();
+        
+        showToast('Картинка обрезана!');
+    }
+
+    // === СТАРТ ===
+    buildSceneSwitcher();
+    loadSceneToCanvas();
+    window.addEventListener('load', () => { updateTransform(); updateSceneSwitcherUI(); });
+    setTimeout(updateTransform, 300);
+    setTimeout(updateTransform, 1000);
+</script>
+</body>
+</html>
